@@ -1,23 +1,48 @@
 name: Build + publish image
 
 # Builds cfg-server-factorio and publishes to ghcr.io.
-#   - main branch push → :latest + :main-<short-sha>
-#   - tagged release (v*) → :<tag> + :latest
+#   - main branch push → :latest + :main-<short-sha> + :<factorio-version>
+#   - tagged release (v*) → :<tag> + :latest + :<factorio-version>
+#   - weekly schedule → rebuild IF upstream stable moved (see below)
 #
 # Multi-arch: linux/amd64 only. Factorio's headless binary is x86_64-glibc;
 # there is no upstream arm64 build, so an arm64 image would silently
 # produce an image that crashes on boot.
+#
+# ── Why this tracks upstream stable automatically ─────────────────────────────
+# Factorio multiplayer requires an EXACT client/server version match, and Steam
+# auto-updates clients. So a server pinned to an old version does not degrade —
+# it becomes flatly unreachable, with the client showing "Version mismatch
+# detected". Pinning at 2.0.76 while Steam shipped 2.0.77 did exactly that.
+#
+# The scheduled run resolves the current stable headless version and rebuilds
+# only when that version has no published tag yet, so a quiet week costs one
+# API call and no build. The concrete version is always published as its own
+# tag alongside :latest — that tag is the rollback handle.
+#
+# Note on rollback: Factorio saves are forward-compatible only. A map opened by
+# 2.0.77 will NOT load under 2.0.76, so rolling the image back after users have
+# played strands their saves. Prefer rolling forward.
 
 on:
   push:
     branches: [main]
     tags: ['v*']
+  schedule:
+    # Mondays 05:00 UTC — after upstream's usual release cadence, before the
+    # week's play sessions.
+    - cron: '0 5 * * 1'
   workflow_dispatch:
     inputs:
       factorio_version:
-        description: 'Factorio headless version (e.g. 2.0.76)'
+        description: 'Factorio headless version, or "stable" to resolve the current one'
         required: false
-        default: '2.0.76'
+        default: 'stable'
+      force:
+        description: 'Build even if this version is already published'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -44,8 +69,47 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Resolve "stable" (or an empty input, i.e. push/schedule) to the concrete
+      # upstream version, so the image carries a real version in its tag+LABEL
+      # and we can tell whether there is anything new to build.
+      - name: Resolve Factorio version
+        id: version
+        run: |
+          set -euo pipefail
+          requested='${{ github.event.inputs.factorio_version }}'
+          if [ -z "$requested" ] || [ "$requested" = 'stable' ]; then
+            resolved=$(curl -fsSL https://factorio.com/api/latest-releases | jq -er '.stable.headless')
+          else
+            resolved="$requested"
+          fi
+          # Guard against a malformed/renamed API field silently becoming a tag.
+          echo "$resolved" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            || { echo "::error::resolved version '$resolved' is not a semver triple"; exit 1; }
+          echo "factorio=$resolved" >> "$GITHUB_OUTPUT"
+          echo "Resolved Factorio headless version: $resolved"
+
+      # A scheduled run on a quiet week should cost one API call, not a build.
+      # Pushes and tags always build — the image can change without the Factorio
+      # version changing (entrypoint fixes, base-image bumps).
+      - name: Check whether this version is already published
+        id: published
+        run: |
+          set -euo pipefail
+          tag='ghcr.io/${{ github.repository_owner }}/cfg-server-factorio:${{ steps.version.outputs.factorio }}'
+          if [ '${{ github.event_name }}' != 'schedule' ] || [ '${{ github.event.inputs.force }}' = 'true' ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if docker manifest inspect "$tag" >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$tag already published — nothing to do."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$tag not published yet — building."
+          fi
+
       - name: Extract metadata
         id: meta
+        if: steps.published.outputs.skip != 'true'
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/cfg-server-factorio
@@ -53,9 +117,11 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=sha,prefix=main-,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' }}
+            type=raw,value=${{ steps.version.outputs.factorio }}
 
       - name: Build + push
+        if: steps.published.outputs.skip != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -64,6 +130,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            FACTORIO_VERSION=${{ github.event.inputs.factorio_version || '2.0.76' }}
+            FACTORIO_VERSION=${{ steps.version.outputs.factorio }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

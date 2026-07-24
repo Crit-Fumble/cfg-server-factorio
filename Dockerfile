@@ -22,7 +22,17 @@
 #   docker run --rm -p 34197:34197/udp -v $(pwd)/saves:/factorio \
 #     cfg-server-factorio:local
 
-ARG FACTORIO_VERSION=2.0.76
+# `stable` is an alias factorio.com resolves server-side to the current stable
+# headless release, so a bare `docker build` always gets the version Steam is
+# shipping clients. CI overrides this with the concrete version it resolved from
+# https://factorio.com/api/latest-releases, so published images carry a real
+# version in their tag and LABEL rather than the literal string "stable".
+#
+# Tracking stable is deliberate, not lazy: Factorio multiplayer requires an
+# EXACT client/server version match, and Steam auto-updates clients. A pinned
+# server silently becomes unreachable the moment upstream moves — which is
+# exactly what happened at 2.0.76 vs a 2.0.77 client.
+ARG FACTORIO_VERSION=stable
 
 FROM debian:bookworm-slim AS extract
 
