@@ -5,8 +5,10 @@
 # Boot flow:
 #   1. Generate /factorio/server-settings.json from FACTORIO_* env vars
 #      on first boot (user-mounted file wins if present).
-#   2. If no save exists in /factorio/saves/, create a fresh map.
-#   3. Launch factorio --start-server-load-latest. tini (PID 1) reaps
+#   2. Seed /factorio/config/config.ini so Factorio's write dir is the
+#      mounted volume and not the root-owned /opt/factorio (see below).
+#   3. If no save exists in /factorio/saves/, create a fresh map.
+#   4. Launch factorio --start-server-load-latest. tini (PID 1) reaps
 #      zombies and forwards SIGTERM so the server autosaves cleanly on
 #      `docker stop` instead of leaving a torn map.
 #
@@ -32,8 +34,30 @@ SAVES_DIR="$ROOT/saves"
 SAVE_NAME="${FACTORIO_SAVE_NAME:-cfg-world}"
 SAVE_FILE="$SAVES_DIR/${SAVE_NAME}.zip"
 FACTORIO_BIN=/opt/factorio/bin/x64/factorio
+CONFIG_DIR="$ROOT/config"
+CONFIG_INI="$CONFIG_DIR/config.ini"
 
-mkdir -p "$SAVES_DIR"
+mkdir -p "$SAVES_DIR" "$CONFIG_DIR"
+
+# Point Factorio's WRITE dir at the mounted volume.
+#
+# The upstream tarball ships config-path.cfg with
+# `use-system-read-write-data-directories=false`, which makes the write dir the
+# application root — so the binary tries to create /opt/factorio/.lock (plus
+# player-data.json, temp/, mods/) on every boot. That tree is root-owned and we
+# run as `factorio`, so the lock fails with EACCES and the process exits 1
+# before doing anything. Passing an explicit --config bypasses config-path.cfg
+# entirely and keeps /opt/factorio read-only, as the Dockerfile intends.
+#
+# Seed-if-absent, so a user who mounts their own config.ini keeps it.
+if [ ! -f "$CONFIG_INI" ]; then
+  echo "[cfg-server-factorio] seeding $CONFIG_INI (write-data → $ROOT)"
+  cat > "$CONFIG_INI" <<-EOF
+	[path]
+	read-data=/opt/factorio/data
+	write-data=$ROOT
+	EOF
+fi
 
 if [ -f "$SETTINGS" ]; then
   echo "[cfg-server-factorio] using mounted server-settings.json at $SETTINGS"
@@ -78,11 +102,12 @@ fi
 # keeps its progress across container restarts).
 if ! compgen -G "$SAVES_DIR/*.zip" > /dev/null; then
   echo "[cfg-server-factorio] no save found — creating $SAVE_FILE"
-  "$FACTORIO_BIN" --create "$SAVE_FILE"
+  "$FACTORIO_BIN" --config "$CONFIG_INI" --create "$SAVE_FILE"
 fi
 
 echo "[cfg-server-factorio] starting Factorio server on UDP port ${FACTORIO_PORT:-34197}"
 exec "$FACTORIO_BIN" \
+  --config "$CONFIG_INI" \
   --start-server-load-latest \
   --port "${FACTORIO_PORT:-34197}" \
   --server-settings "$SETTINGS"
