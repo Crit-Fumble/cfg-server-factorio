@@ -105,9 +105,23 @@ if ! compgen -G "$SAVES_DIR/*.zip" > /dev/null; then
   "$FACTORIO_BIN" --config "$CONFIG_INI" --create "$SAVE_FILE"
 fi
 
+# RCON — the platform's admin channel (activity probe player counts, the
+# Avatars roster, surface/scene enumeration). Enabled only when a password is
+# provided (core-server passes a per-install derived one); a bare `docker run`
+# without it gets no RCON listener at all. The port is container-internal —
+# core-server dials it by container name over the shared docker network; it is
+# NEVER published to a host port, so the derived password is a second gate,
+# not the only one.
+RCON_FLAGS=()
+if [ -n "${FACTORIO_RCON_PASSWORD:-}" ]; then
+  RCON_FLAGS+=(--rcon-port "${FACTORIO_RCON_PORT:-27015}" --rcon-password "$FACTORIO_RCON_PASSWORD")
+  echo "[cfg-server-factorio] RCON enabled on tcp/${FACTORIO_RCON_PORT:-27015} (docker-network only)"
+fi
+
 echo "[cfg-server-factorio] starting Factorio server on UDP port ${FACTORIO_PORT:-34197}"
 exec "$FACTORIO_BIN" \
   --config "$CONFIG_INI" \
   --start-server-load-latest \
   --port "${FACTORIO_PORT:-34197}" \
-  --server-settings "$SETTINGS"
+  --server-settings "$SETTINGS" \
+  "${RCON_FLAGS[@]}"
