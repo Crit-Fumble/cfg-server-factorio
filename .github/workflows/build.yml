@@ -26,7 +26,7 @@ name: Build + publish image
 
 on:
   push:
-    branches: [main]
+    branches: [main, next]
     tags: ['v*']
   schedule:
     # Mondays 05:00 UTC — after upstream's usual release cadence, before the
