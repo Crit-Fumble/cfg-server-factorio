@@ -20,7 +20,8 @@ autosave (SIGTERM via tini).
 ## Commit messages & PRs
 
 Use [Conventional Commits](https://www.conventionalcommits.org/)
-(`feat`, `fix`, `chore`, `docs`, `ci`, `build`). Fork, branch from `main`,
+(`feat`, `fix`, `chore`, `docs`, `ci`, `build`). Fork, branch from `next` (the release-candidate branch;
+`main` is released truth and only ever fast-forwarded to),
 describe how you tested the container, and explain the *why* in the PR
 description.
 
