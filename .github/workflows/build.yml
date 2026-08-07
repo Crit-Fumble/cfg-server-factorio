@@ -3,7 +3,9 @@ name: Build + publish image
 # Builds cfg-server-factorio and publishes to ghcr.io.
 #   - main branch push → :latest + :main-<short-sha> + :<factorio-version>
 #   - tagged release (v*) → :<tag> + :latest + :<factorio-version>
-#   - weekly schedule → rebuild IF upstream stable moved (see below)
+#   - daily schedule → rebuild IF upstream stable moved (see below); the
+#     upstream-watch workflow in cfg-core-dev-tools separately opens a pin-bump
+#     PR so the move is acknowledged on the record
 #
 # Multi-arch: linux/amd64 only. Factorio's headless binary is x86_64-glibc;
 # there is no upstream arm64 build, so an arm64 image would silently
@@ -29,9 +31,12 @@ on:
     branches: [main, next]
     tags: ['v*']
   schedule:
-    # Mondays 05:00 UTC — after upstream's usual release cadence, before the
-    # week's play sessions.
-    - cron: '0 5 * * 1'
+    # Daily 05:00 UTC. Upstream patches are not tied to a weekday, and the
+    # failure shape is an outage (version mismatch = unreachable server), so
+    # the detection window should be hours, not up to six days. A quiet day
+    # costs one API call and no build — the published-version check below
+    # short-circuits.
+    - cron: '0 5 * * *'
   workflow_dispatch:
     inputs:
       factorio_version:
