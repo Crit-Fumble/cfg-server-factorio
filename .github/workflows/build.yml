@@ -1,11 +1,21 @@
 name: Build + publish image
 
 # Builds cfg-server-factorio and publishes to ghcr.io.
-#   - main branch push → :latest + :main-<short-sha> + :<factorio-version>
+#   - main branch push → :main + :main-<short-sha> ONLY — CFG-side Dockerfile
+#     changes ship via a v* tag (or ride the next upstream bump), never on a
+#     bare branch push
 #   - tagged release (v*) → :<tag> + :latest + :<factorio-version>
-#   - daily schedule → rebuild IF upstream stable moved (see below); the
-#     upstream-watch workflow in cfg-core-dev-tools separately opens a pin-bump
-#     PR so the move is acknowledged on the record
+#   - daily schedule → rebuild IF upstream stable moved (see below), publishing
+#     :latest + :<factorio-version>; the upstream-watch workflow in
+#     cfg-core-dev-tools separately opens a pin-bump PR so the move is
+#     acknowledged on the record
+#
+# ── NOTIFY mode: the ONE org exception to "`:latest` moves only on a v* tag" ──
+# Owner decision 2026-08-06, re-confirmed 2026-08-15. Every other kind repo
+# gates `:latest` on v* tags alone; factorio's schedule keeps auto-shipping it
+# because a stale Factorio server is not degraded, it is UNREACHABLE (exact
+# client/server version match + Steam auto-updates clients — see below). The
+# check-workflow-tag-coupling guard in dev-tools carries a matching carve-out.
 #
 # Multi-arch: linux/amd64 only. Factorio's headless binary is x86_64-glibc;
 # there is no upstream arm64 build, so an arm64 image would silently
@@ -100,7 +110,13 @@ jobs:
         id: published
         run: |
           set -euo pipefail
-          tag='ghcr.io/${{ github.repository_owner }}/cfg-server-factorio:${{ steps.version.outputs.factorio }}'
+          # Owner hardcoded lowercase: Docker rejects uppercase repository
+          # names, and `${{ github.repository_owner }}` is `Crit-Fumble` — with
+          # it, this probe failed on EVERY scheduled run (error swallowed by
+          # the redirect below), so the short-circuit never fired and the
+          # schedule rebuilt + republished daily. metadata-action lowercases on
+          # its own, which is why the tags themselves were always fine.
+          tag='ghcr.io/crit-fumble/cfg-server-factorio:${{ steps.version.outputs.factorio }}'
           if [ '${{ github.event_name }}' != 'schedule' ] || [ '${{ github.event.inputs.force }}' = 'true' ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
@@ -122,8 +138,8 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=sha,prefix=main-,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' }}
-            type=raw,value=${{ steps.version.outputs.factorio }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' }}
+            type=raw,value=${{ steps.version.outputs.factorio }},enable=${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
 
       - name: Build + push
         if: steps.published.outputs.skip != 'true'
