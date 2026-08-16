@@ -2,7 +2,7 @@
 
 Thin container around the official [Factorio dedicated server](https://factorio.com/download/headless). Used by Crit-Fumble's Server Manager to host per-user Factorio instances under the `kind=factorio` adapter.
 
-No mods baked in, no Steam dependency — just the upstream headless tarball, extracted onto `debian-slim`, run as a non-root user (`uid=1000`), with saves living in a `/factorio` volume.
+No Steam dependency — just the upstream headless tarball, extracted onto `debian-slim`, run as a non-root user (`uid=1000`), with saves, mods and config living in a `/factorio` volume. Mods are downloaded from the [Factorio mod portal](https://mods.factorio.com) at boot (see below); the only mod baked into the image is the optional, default-off `crit-fumble-link` service mod.
 
 ## Run standalone
 
@@ -29,8 +29,46 @@ First boot generates a fresh `cfg-world.zip` (default settings — see env vars)
 | `FACTORIO_NAME` | _Crit-Fumble Factorio Server_ | shown in server browser |
 | `FACTORIO_DESCRIPTION` | _Hosted by Crit-Fumble_ | shown in server browser |
 | `FACTORIO_PASSWORD` | _(empty)_ | server password |
+| `FACTORIO_MODS` | _(empty)_ | comma-separated mod names; seeds `mods/mod-list.json` on first boot |
+| `FACTORIO_ADMINS` | _(empty)_ | comma-separated Factorio usernames; seeds `server-adminlist.json` on first boot |
+| `FACTORIO_USERNAME` | _(empty)_ | factorio.com username — needed for mod downloads + public listing |
+| `FACTORIO_TOKEN` | _(empty)_ | factorio.com token (profile page / `player-data.json`) |
+| `FACTORIO_SERVICE_MOD` | `false` | install + enable the bundled `crit-fumble-link` service mod |
 
-A user-supplied `/factorio/server-settings.json` (e.g. mounted in by core-server) takes precedence over the env-driven template.
+The env vars are **first-boot seeds**. Every file below can instead be pre-written into the volume (core-server does exactly that for hosted installs) and always wins over its env template:
+
+| file in `/factorio` | role |
+|---|---|
+| `server-settings.json` | full server config |
+| `server-adminlist.json` | JSON array of admin usernames — in-game `/promote` persists here too, so it is never regenerated |
+| `mods/mod-list.json` | which mods are enabled (Factorio's own format; the boot sync reads it) |
+| `map-gen-settings.json` | world generation — applied only when the first map is created |
+| `map-settings.json` | runtime balance (pollution, biters, …) — applied only at map creation |
+
+## Mods
+
+`mods/mod-list.json` is the single manifest. At boot the entrypoint downloads every enabled mod that has no zip in `/factorio/mods` yet, from the Factorio mod portal, verifying each file's sha1. Portal downloads are account-gated, so `FACTORIO_USERNAME` + `FACTORIO_TOKEN` must be set for the sync to work.
+
+A missing mod that cannot be downloaded **fails the boot on purpose**: loading a save without a mod it was played with silently deletes that mod's entities from the map. Downtime is recoverable; a stripped save is not.
+
+Already-downloaded mods are never re-downloaded or auto-updated — drop the zip (or bump `mod-list.json` and delete the old zip) to update. Dependencies are not auto-resolved; list them explicitly.
+
+## Admins
+
+`server-adminlist.json` (JSON array of Factorio usernames) is passed via `--server-adminlist`. Seed it with `FACTORIO_ADMINS` or pre-write the file; in-game `/promote` / `/demote` (and RCON's) persist to the same file, which is why the entrypoint seeds it only when absent.
+
+## The `crit-fumble-link` service mod
+
+`mod/crit-fumble-link/` is a control-stage-only mod (no prototypes — adding or removing it never alters a map) bundled into the image. It is the platform's service-admin channel, the Factorio analogue of Crit-Fumble's FoundryVTT plugin — with one big difference: Factorio mods are fully sandboxed (no network, no filesystem reads), so the platform **pulls** over RCON instead of the mod phoning home:
+
+```
+/silent-command rcon.print(remote.call("cfg", "status"))   → one JSON line
+/silent-command rcon.print(remote.call("cfg", "announce", "msg"))
+```
+
+Note Factorio warns once per session before the first Lua console command ("using Lua console commands will disable achievements — repeat to proceed"); an RCON client must issue one throwaway command to prime the channel.
+
+⚠️ **`FACTORIO_SERVICE_MOD` defaults to `false`, deliberately.** Factorio requires every connecting client to run the exact same mod set as the server. Until `crit-fumble-link` is published on the mod portal (where the client's "Sync mods with server" button can fetch it), enabling it makes the server unjoinable. Turning it off again is safe and idempotent — the entrypoint removes the zip and its `mod-list.json` entry.
 
 ## CFG-hosted usage
 
