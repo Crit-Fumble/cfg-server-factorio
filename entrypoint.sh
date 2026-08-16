@@ -17,7 +17,9 @@
 #      boot. In-game /promote persists to the same file, so it is seeded
 #      once and never regenerated — a pre-written file always wins.
 #   5. If no save exists in /factorio/saves/, create a fresh map —
-#      honoring mounted map-gen-settings.json / map-settings.json.
+#      from FACTORIO_MAP_PRESET (one of the game's own presets, e.g.
+#      death-world), or from mounted map-gen-settings.json /
+#      map-settings.json, which win over the preset.
 #   6. Launch factorio --start-server-load-latest. tini (PID 1) reaps
 #      zombies and forwards SIGTERM so the server autosaves cleanly on
 #      `docker stop` instead of leaving a torn map.
@@ -31,6 +33,9 @@
 #   mods/mod-list.json       which mods are enabled (the portal sync reads it)
 #   map-gen-settings.json    world generation — applied only at map creation
 #   map-settings.json        runtime balance — applied only at map creation
+#
+# Either of those two also OVERRIDES FACTORIO_MAP_PRESET, which is the
+# no-JSON way to ask for one of the game's built-in world characters.
 
 set -euo pipefail
 
@@ -281,8 +286,39 @@ if ! compgen -G "$SAVES_DIR/*.zip" > /dev/null; then
     CREATE_FLAGS+=(--map-settings "$ROOT/map-settings.json")
     log "using map-settings.json for world creation"
   fi
+  # FACTORIO_MAP_PRESET names one of the game's OWN map-gen presets
+  # (data/base/prototypes/map-gen-presets.lua): death-world,
+  # death-world-marathon, rich-resources, marathon, rail-world,
+  # ribbon-world, lakes, island — or `default`, which changes nothing.
+  #
+  # Preferred over hand-written JSON because a preset carries BOTH halves
+  # of a world's character in one name — the basic_settings that land in
+  # map-gen-settings.json (enemy frequency/size, starting area) AND the
+  # advanced_settings that land in map-settings.json (evolution factors,
+  # pollution ageing). Verified against 2.0.77: `--preset death-world`
+  # reproduces every documented death-world value on both sides, so the
+  # platform never has to carry a copy of upstream's numbers.
+  #
+  # Pre-written files win, per this script's standing contract — if the
+  # operator mounted either one they are configuring by hand, and a preset
+  # silently merging into that is the confusing outcome.
+  if [ -n "${FACTORIO_MAP_PRESET:-}" ]; then
+    if [ "${#CREATE_FLAGS[@]}" -gt 0 ]; then
+      log "ignoring FACTORIO_MAP_PRESET=${FACTORIO_MAP_PRESET} — mounted map-gen/map-settings JSON wins"
+    else
+      CREATE_FLAGS+=(--preset "$FACTORIO_MAP_PRESET")
+      log "using map-gen preset '${FACTORIO_MAP_PRESET}' for world creation"
+    fi
+  fi
   log "no save found — creating $SAVE_FILE"
   "$FACTORIO_BIN" --config "$CONFIG_INI" --create "$SAVE_FILE" "${CREATE_FLAGS[@]}"
+  # A bad preset name exits 1 (`Preset "x" doesn't exist.`) and `set -e`
+  # already stops us there. This guards the other shape: --create
+  # reporting success while leaving no file behind. Without it the next
+  # line launches --start-server-load-latest against an empty saves/ dir,
+  # and the container dies complaining about no save rather than about
+  # whatever actually went wrong during creation.
+  [ -f "$SAVE_FILE" ] || die "map creation reported success but left no save at $SAVE_FILE"
 fi
 
 # ── 6. Launch ───────────────────────────────────────────────────────────────
