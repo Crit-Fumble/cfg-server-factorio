@@ -62,6 +62,27 @@ RUN curl -fsSL -o factorio.tar.xz "$FACTORIO_URL" && \
     mv factorio /opt/factorio && \
     chmod +x /opt/factorio/bin/x64/factorio
 
+# ── Bundled crit-fumble-link service mod ────────────────────────────────────
+# Zipped in its own stage so editing the mod never re-downloads the Factorio
+# tarball (and vice versa). Factorio requires the zip's top-level dir to be
+# `<name>_<version>`, matching info.json.
+FROM debian:bookworm-slim AS modpack
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    apt-get update && apt-get install -y --no-install-recommends \
+      jq zip && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY mod/ /build/mod/
+RUN set -eu; \
+    version=$(jq -er .version /build/mod/crit-fumble-link/info.json); \
+    mkdir -p /opt/cfg/mods; \
+    cd /build/mod; \
+    cp -r crit-fumble-link "crit-fumble-link_${version}"; \
+    zip -qr "/opt/cfg/mods/crit-fumble-link_${version}.zip" "crit-fumble-link_${version}"
+
 # ── Final runtime image ─────────────────────────────────────────────────────
 FROM debian:bookworm-slim
 
@@ -75,15 +96,18 @@ LABEL org.opencontainers.image.version="${FACTORIO_VERSION}"
 # Factorio's headless binary is a 64-bit native ELF; needs libstdc++ + libgcc.
 # tini reaps zombies and forwards SIGTERM so `docker stop` does a clean
 # autosave-and-exit instead of leaving a torn map.
+# curl + jq serve the entrypoint's mod-portal sync (download enabled-but-
+# missing mods at boot) and its mod-list.json editing.
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     rm -f /etc/apt/apt.conf.d/docker-clean && \
     apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates libstdc++6 libgcc-s1 tini && \
+      ca-certificates curl jq libstdc++6 libgcc-s1 tini && \
     rm -rf /var/lib/apt/lists/* && \
     useradd --system --uid 1000 --user-group --no-create-home --shell /usr/sbin/nologin factorio
 
 COPY --from=extract /opt/factorio /opt/factorio
+COPY --from=modpack /opt/cfg /opt/cfg
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
@@ -100,6 +124,10 @@ WORKDIR /factorio
 # --rcon-port at runtime and add a TCP port mapping.
 EXPOSE 34197/udp
 
+# FACTORIO_SERVICE_MOD defaults OFF: Factorio requires connecting clients to
+# match the server's mod set, so the bundled crit-fumble-link mod must be
+# published on the mod portal (client "Sync mods" source) before any server
+# enables it. core-server flips it per-installation once that holds.
 ENV FACTORIO_SAVE_NAME=cfg-world \
     FACTORIO_PORT=34197 \
     FACTORIO_MAX_PLAYERS=16 \
@@ -109,6 +137,11 @@ ENV FACTORIO_SAVE_NAME=cfg-world \
     FACTORIO_AUTOSAVE_INTERVAL=10 \
     FACTORIO_NAME="Crit-Fumble Factorio Server" \
     FACTORIO_DESCRIPTION="Hosted by Crit-Fumble" \
-    FACTORIO_PASSWORD=""
+    FACTORIO_PASSWORD="" \
+    FACTORIO_MODS="" \
+    FACTORIO_ADMINS="" \
+    FACTORIO_USERNAME="" \
+    FACTORIO_TOKEN="" \
+    FACTORIO_SERVICE_MOD=false
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

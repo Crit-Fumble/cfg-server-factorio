@@ -1,0 +1,11 @@
+{
+  "name": "crit-fumble-link",
+  "version": "0.1.0",
+  "title": "Crit-Fumble Link",
+  "author": "Crit-Fumble Gaming",
+  "contact": "https://www.crit-fumble.com",
+  "homepage": "https://github.com/Crit-Fumble/cfg-server-factorio",
+  "description": "Service link for Crit-Fumble hosted Factorio servers: structured status for the platform dashboard and platform-to-game announcements. Control-stage only — no prototypes — so adding or removing it never alters a map.",
+  "factorio_version": "2.0",
+  "dependencies": ["base >= 2.0"]
+}

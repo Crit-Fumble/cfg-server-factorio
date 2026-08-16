@@ -1,8 +1,9 @@
 # Contributing to cfg-server-factorio
 
 This repo is a thin container around the official Factorio dedicated server —
-a `Dockerfile`, an `entrypoint.sh`, and nothing else. There is no Node
-toolchain and no test suite; **Docker is the only prerequisite**.
+a `Dockerfile`, an `entrypoint.sh`, and the small `mod/crit-fumble-link/`
+service mod (plain Lua, zipped at image build). There is no Node toolchain
+and no test suite; **Docker is the only prerequisite**.
 
 ## Build & run locally
 
@@ -15,7 +16,16 @@ The README documents the env-var config knobs and the CFG-hosted usage. When
 changing `entrypoint.sh`, verify by hand that a fresh container still
 auto-creates a world, that a mounted `server-settings.json` still takes
 precedence over the env template, and that `docker stop` completes the final
-autosave (SIGTERM via tini).
+autosave (SIGTERM via tini). When touching the mod pipeline, also verify that
+`FACTORIO_SERVICE_MOD=true` installs + loads `crit-fumble-link` (the boot log
+shows its control.lua checksum), that unsetting it removes the zip *and* its
+`mod-list.json` entry, and that a mod-list entry with no zip and no
+`FACTORIO_USERNAME`/`FACTORIO_TOKEN` fails the boot loudly instead of
+starting without the mod.
+
+⚠️ On Apple Silicon, build with `--platform linux/amd64` (as CI does) —
+a default build produces an arm64 rootfs and the x86_64 Factorio binary
+dies with a Rosetta ELF-loader error at boot.
 
 ## Commit messages & PRs
 
