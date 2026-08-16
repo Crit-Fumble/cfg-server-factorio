@@ -34,6 +34,7 @@ First boot generates a fresh `cfg-world.zip` (default settings — see env vars)
 | `FACTORIO_USERNAME` | _(empty)_ | factorio.com username — needed for mod downloads + public listing |
 | `FACTORIO_TOKEN` | _(empty)_ | factorio.com token (profile page / `player-data.json`) |
 | `FACTORIO_SERVICE_MOD` | `false` | install + enable the bundled `crit-fumble-link` service mod |
+| `FACTORIO_MAP_PRESET` | _(empty)_ | one of the game's built-in map-gen presets (e.g. `death-world`) — applied only when the first map is created |
 
 The env vars are **first-boot seeds**. Every file below can instead be pre-written into the volume (core-server does exactly that for hosted installs) and always wins over its env template:
 
@@ -44,6 +45,32 @@ The env vars are **first-boot seeds**. Every file below can instead be pre-writt
 | `mods/mod-list.json` | which mods are enabled (Factorio's own format; the boot sync reads it) |
 | `map-gen-settings.json` | world generation — applied only when the first map is created |
 | `map-settings.json` | runtime balance (pollution, biters, …) — applied only at map creation |
+
+## World presets
+
+`FACTORIO_MAP_PRESET` names one of Factorio's **own** map-gen presets, so a world
+gets its character from a single word instead of two hand-maintained JSON files:
+
+`default` (changes nothing) · `death-world` · `death-world-marathon` · `rich-resources` ·
+`marathon` · `rail-world` · `ribbon-world` · `lakes` · `island`
+
+The list comes from `data/base/prototypes/map-gen-presets.lua` inside the image, which
+is the authority — check there after a Factorio upgrade rather than trusting this line.
+
+A preset is the better default because it carries **both halves** of a world's
+character at once. `death-world`, for example, sets enemy frequency/size and the
+starting area (the `map-gen-settings.json` half) *and* the evolution + pollution
+factors (the `map-settings.json` half). Verified against 2.0.77: creating with
+`--preset death-world` reproduces every documented death-world value on both sides,
+so nothing here has to carry a copy of upstream's numbers.
+
+⚠️ It applies **only at first map creation**, like the two JSON files — changing it
+later does nothing to an existing save. And if either JSON file is present the preset
+is ignored (logged), keeping the "pre-written files always win" rule above intact.
+
+An unknown preset name makes Factorio exit 1 (`Preset "x" doesn't exist.`), which
+fails the boot immediately — the name is validated by the game, not by this image, so
+it never drifts from what the installed version actually ships.
 
 ## Mods
 

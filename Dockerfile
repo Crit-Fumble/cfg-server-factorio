@@ -142,6 +142,7 @@ ENV FACTORIO_SAVE_NAME=cfg-world \
     FACTORIO_ADMINS="" \
     FACTORIO_USERNAME="" \
     FACTORIO_TOKEN="" \
-    FACTORIO_SERVICE_MOD=false
+    FACTORIO_SERVICE_MOD=false \
+    FACTORIO_MAP_PRESET=""
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
