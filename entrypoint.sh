@@ -122,9 +122,9 @@ fi
 # 2b. The bundled crit-fumble-link service mod.
 #
 # ⚠️ Default OFF, deliberately: Factorio requires every CONNECTING CLIENT to
-# run the exact same mod set as the server. Until crit-fumble-link is
-# published on the Factorio mod portal (where the client's "Sync mods with
-# server" button can fetch it), enabling this makes the server unjoinable —
+# run the exact same mod set as the server. Enabling a crit-fumble-link
+# version that is not published on the Factorio mod portal (where the client's
+# "Sync mods with server" button can fetch it) makes the server unjoinable —
 # "missing mod" with no way to install it. core-server flips it on
 # per-installation once the portal listing exists.
 link_zip=$(compgen -G "$LINK_BUNDLE_DIR/${LINK_NAME}_*.zip" | head -n 1 || true)
