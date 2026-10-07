@@ -5,6 +5,7 @@
 # Boot flow:
 #   1. Seed /factorio/config/config.ini so Factorio's write dir is the
 #      mounted volume and not the root-owned /opt/factorio (see below).
+#      On a Docker Desktop file share, point temp/ at the container's disk.
 #   2. Assemble the mod set:
 #        a. seed mods/mod-list.json from FACTORIO_MODS on first boot,
 #        b. install or remove the bundled crit-fumble-link service mod
@@ -83,6 +84,24 @@ if [ ! -f "$CONFIG_INI" ]; then
 	read-data=/opt/factorio/data
 	write-data=$ROOT
 	EOF
+fi
+
+# ── 1b. temp/ off a Docker Desktop file share ──────────────────────────────
+#
+# Factorio builds a map in temp/currently-playing, and --create copies
+# level.dat to level-init.dat there with std::filesystem::copy_file, which
+# creates the copy at mode 0200 and widens it afterwards. Docker Desktop's
+# file sharing (virtiofs, as on macOS) refuses any create without the
+# owner-read bit: EACCES, for root as well, leaving a 0200 stub behind. So a
+# fresh map dies with `copy_file ... Permission denied` on a bind-mounted
+# /factorio there. temp/ is scratch that Factorio refills from the save on
+# every load, so on such a share it moves to the container's own disk. A Linux
+# host's bind mount reports the host filesystem (ext4, xfs) and is left alone.
+if [ "$(awk -v m="$ROOT" '$2 == m { t = $3 } END { print t }' /proc/mounts)" = virtiofs ]; then
+  mkdir -p /tmp/factorio-temp
+  rm -rf "$ROOT/temp"
+  ln -s /tmp/factorio-temp "$ROOT/temp"
+  log "temp/ → /tmp/factorio-temp ($ROOT is a virtiofs share)"
 fi
 
 # ── 2. Mods ─────────────────────────────────────────────────────────────────
