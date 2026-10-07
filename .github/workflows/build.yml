@@ -11,7 +11,7 @@ name: Build + publish image
 #     acknowledged on the record
 #
 # ── NOTIFY mode: the ONE org exception to "`:latest` moves only on a v* tag" ──
-# Owner decision 2026-08-06, re-confirmed 2026-08-15. Every other kind repo
+# Owner decision 2026-08-06. Every other kind repo
 # gates `:latest` on v* tags alone; factorio's schedule keeps auto-shipping it
 # because a stale Factorio server is not degraded, it is UNREACHABLE (exact
 # client/server version match + Steam auto-updates clients — see below). The
@@ -25,7 +25,7 @@ name: Build + publish image
 # Factorio multiplayer requires an EXACT client/server version match, and Steam
 # auto-updates clients. So a server pinned to an old version does not degrade —
 # it becomes flatly unreachable, with the client showing "Version mismatch
-# detected". Pinning at 2.0.76 while Steam shipped 2.0.77 did exactly that.
+# detected".
 #
 # The scheduled run resolves the current stable headless version and rebuilds
 # only when that version has no published tag yet, so a quiet week costs one
@@ -119,10 +119,10 @@ jobs:
           set -euo pipefail
           # Owner hardcoded lowercase: Docker rejects uppercase repository
           # names, and `${{ github.repository_owner }}` is `Crit-Fumble` — with
-          # it, this probe failed on EVERY scheduled run (error swallowed by
-          # the redirect below), so the short-circuit never fired and the
-          # schedule rebuilt + republished daily. metadata-action lowercases on
-          # its own, which is why the tags themselves were always fine.
+          # it, this probe fails on EVERY scheduled run (the error is swallowed
+          # by the redirect below), so the short-circuit never fires and the
+          # schedule rebuilds + republishes daily. metadata-action lowercases on
+          # its own, which is why the tags themselves are fine.
           tag='ghcr.io/crit-fumble/cfg-server-factorio:${{ steps.version.outputs.factorio }}'
           if [ '${{ github.event_name }}' != 'schedule' ] || [ '${{ github.event.inputs.force }}' = 'true' ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"; exit 0

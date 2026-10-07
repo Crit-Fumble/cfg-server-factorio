@@ -33,9 +33,8 @@
 # so published images track upstream automatically. That is deliberate, not
 # lazy: Factorio multiplayer requires an EXACT client/server version match, and
 # Steam auto-updates clients. A server gated on a human review becomes
-# unreachable the moment upstream moves — which is exactly what happened at
-# 2.0.76 vs a 2.0.77 client. The pin flips from record to build input ("gate
-# mode") only when kind QA can vouch for a bump automatically.
+# unreachable the moment upstream moves. The pin flips from record to build
+# input ("gate mode") only when kind QA can vouch for a bump automatically.
 ARG FACTORIO_VERSION=2.0.77
 
 FROM debian:bookworm-slim AS extract
@@ -119,9 +118,10 @@ RUN mkdir -p /factorio/saves /factorio/mods && \
 USER factorio
 WORKDIR /factorio
 
-# 34197/udp is Factorio's only required listener. RCON is intentionally
-# omitted from this image; if/when an admin surface needs it, expose
-# --rcon-port at runtime and add a TCP port mapping.
+# 34197/udp is Factorio's only required listener. RCON is deliberately not
+# EXPOSEd: the entrypoint enables it only when FACTORIO_RCON_PASSWORD is set,
+# on a container-internal port core-server dials over the docker network — it
+# is never published to a host port.
 EXPOSE 34197/udp
 
 # FACTORIO_SERVICE_MOD defaults OFF: Factorio requires connecting clients to

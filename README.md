@@ -46,6 +46,9 @@ The env vars are **first-boot seeds**. Every file below can instead be pre-writt
 | `map-gen-settings.json` | world generation — applied only when the first map is created |
 | `map-settings.json` | runtime balance (pollution, biters, …) — applied only at map creation |
 
+⚠️ A pre-written `map-settings.json` must be complete: Factorio refuses a partial one (`Key "enabled" not found in property tree at ROOT.pollution`).
+Start from the image's `/opt/factorio/data/map-settings.example.json`, which is exactly the runtime defaults, and patch it.
+
 ## World presets
 
 `FACTORIO_MAP_PRESET` names one of Factorio's **own** map-gen presets, so a world
@@ -95,7 +98,10 @@ Already-downloaded mods are never re-downloaded or auto-updated — drop the zip
 
 Note Factorio warns once per session before the first Lua console command ("using Lua console commands will disable achievements — repeat to proceed"); an RCON client must issue one throwaway command to prime the channel.
 
-⚠️ **`FACTORIO_SERVICE_MOD` defaults to `false`, deliberately.** Factorio requires every connecting client to run the exact same mod set as the server. Until `crit-fumble-link` is published on the mod portal (where the client's "Sync mods with server" button can fetch it), enabling it makes the server unjoinable. Turning it off again is safe and idempotent — the entrypoint removes the zip and its `mod-list.json` entry.
+⚠️ **`FACTORIO_SERVICE_MOD` defaults to `false`, deliberately.** Factorio requires every connecting client to run the exact same mod set as the server.
+`crit-fumble-link` 0.1.0 is published on the mod portal under the CritFumbleGaming account, content-identical to the image bundle, so a client's
+"Sync mods with server" can fetch it. Enabling a mod version that is not on the portal still makes the server unjoinable.
+Turning it off again is safe and idempotent — the entrypoint removes the zip and its `mod-list.json` entry.
 
 ## CFG-hosted usage
 
@@ -110,8 +116,6 @@ Core-server provisions one container per `UserAppInstallation` via the Server Ma
 - launcher: `cfg-core-server/src/services/factorio/launch.ts`
 - volume: `/mnt/cfg_user_storage/users/<userId>/installations/<installationId>/data/` → `/factorio`
 
-Billing tick (CT per uptime hour) is owned by the adapter, same shape as `kinds/foundryvtt.ts` and `kinds/terraria.ts`.
-
 ## Build
 
 ```sh
@@ -120,7 +124,8 @@ docker build -t cfg-server-factorio:local .
 docker build --build-arg FACTORIO_VERSION=2.0.76 -t cfg-server-factorio:2.0.76 .
 ```
 
-CI publishes `ghcr.io/crit-fumble/cfg-server-factorio` on main + tagged releases (see `.github/workflows/build.yml`).
+CI publishes `:main` and `:next` on branch pushes. `:latest`, which the `docker run` above pulls, moves on a `v*` tag and on the daily scheduled
+rebuild when Factorio's upstream stable moves, because a server older than Steam-updated clients is unreachable (see `.github/workflows/build.yml`).
 
 ## License
 
