@@ -35,7 +35,7 @@
 # Steam auto-updates clients. A server gated on a human review becomes
 # unreachable the moment upstream moves. The pin flips from record to build
 # input ("gate mode") only when kind QA can vouch for a bump automatically.
-ARG FACTORIO_VERSION=2.0.77
+ARG FACTORIO_VERSION=2.1.23
 
 FROM debian:bookworm-slim AS extract
 
