@@ -28,10 +28,9 @@ a mod-portal upload of that same version (`releases/init_upload`). Joining
 clients fetch the mod from the portal via "Sync mods with server", so the
 image's bundled copy and the portal's copy of a version must be identical.
 Compare them by diffing file contents, never zip sha1, because builds re-zip
-with fresh timestamps. Uploads use the CritFumbleGaming account's portal API
-key, `FACTORIO_API_KEY` in CFG's private dev-tools `.env`, which also carries
-the Edit Mods usage. It never enters this repo, and neither it nor a signed
-upload URL is ever printed.
+with fresh timestamps. Uploads use the publishing account's portal API key
+(`FACTORIO_API_KEY`, with the Edit Mods usage), kept outside this repo. It never
+enters this repo, and neither it nor a signed upload URL is ever printed.
 
 ⚠️ On Apple Silicon, build with `--platform linux/amd64` (as CI does) —
 a default build produces an arm64 rootfs and the x86_64 Factorio binary

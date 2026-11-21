@@ -36,7 +36,8 @@ First boot generates a fresh `cfg-world.zip` (default settings — see env vars)
 | `FACTORIO_SERVICE_MOD` | `false` | install + enable the bundled `crit-fumble-link` service mod |
 | `FACTORIO_MAP_PRESET` | _(empty)_ | one of the game's built-in map-gen presets (e.g. `death-world`) — applied only when the first map is created |
 
-The env vars are **first-boot seeds**. Every file below can instead be pre-written into the volume (core-server does exactly that for hosted installs) and always wins over its env template:
+The env vars are **first-boot seeds**. Every file below can instead be pre-written into the volume (core-server does that for a hosted install's
+`server-settings.json`, `server-adminlist.json` and `mods/mod-list.json`) and always wins over its env template:
 
 | file in `/factorio` | role |
 |---|---|
@@ -52,20 +53,15 @@ Start from the image's `/opt/factorio/data/map-settings.example.json`, which is 
 ## World presets
 
 `FACTORIO_MAP_PRESET` names one of Factorio's **own** map-gen presets, so a world
-gets its character from a single word instead of two hand-maintained JSON files:
-
-`default` (changes nothing) · `death-world` · `death-world-marathon` · `rich-resources` ·
-`marathon` · `rail-world` · `ribbon-world` · `lakes` · `island`
-
-The list comes from `data/base/prototypes/map-gen-presets.lua` inside the image, which
-is the authority — check there after a Factorio upgrade rather than trusting this line.
+gets its character from a single word instead of two hand-maintained JSON files.
+The names are the presets in `data/base/prototypes/map-gen-presets.lua` inside the image,
+which is the authority; `default` changes nothing.
 
 A preset is the better default because it carries **both halves** of a world's
 character at once. `death-world`, for example, sets enemy frequency/size and the
 starting area (the `map-gen-settings.json` half) *and* the evolution + pollution
-factors (the `map-settings.json` half). Verified against 2.0.77: creating with
-`--preset death-world` reproduces every documented death-world value on both sides,
-so nothing here has to carry a copy of upstream's numbers.
+factors (the `map-settings.json` half), so nothing here has to carry a copy of
+upstream's numbers.
 
 ⚠️ It applies **only at first map creation**, like the two JSON files — changing it
 later does nothing to an existing save. And if either JSON file is present the preset
@@ -99,22 +95,16 @@ Already-downloaded mods are never re-downloaded or auto-updated — drop the zip
 Note Factorio warns once per session before the first Lua console command ("using Lua console commands will disable achievements — repeat to proceed"); an RCON client must issue one throwaway command to prime the channel.
 
 ⚠️ **`FACTORIO_SERVICE_MOD` defaults to `false`, deliberately.** Factorio requires every connecting client to run the exact same mod set as the server.
-`crit-fumble-link` 0.1.0 is published on the mod portal under the CritFumbleGaming account, content-identical to the image bundle, so a client's
-"Sync mods with server" can fetch it. Enabling a mod version that is not on the portal still makes the server unjoinable.
+The bundled version (`mod/crit-fumble-link/info.json`) is published on the mod portal under the CritFumbleGaming account,
+content-identical to the bundle, so a client's "Sync mods with server" can fetch it.
+Enabling a mod version that is not on the portal still makes the server unjoinable.
 Turning it off again is safe and idempotent — the entrypoint removes the zip and its `mod-list.json` entry.
 
 ## CFG-hosted usage
 
-> ℹ️ **`cfg-core-server` is a private CFG repo.** The paths below are named for orientation —
-> they are not links you can open. **Nothing in this repo depends on them:** the container runs
-> standalone with the `docker run` above, and the CFG integration is one consumer of it, not a
-> requirement.
-
-Core-server provisions one container per `UserAppInstallation` via the Server Manager kind-registry:
-
-- adapter: `cfg-core-server/src/services/server-manager/kinds/factorio.ts`
-- launcher: `cfg-core-server/src/services/factorio/launch.ts`
-- volume: `/mnt/cfg_user_storage/users/<userId>/installations/<installationId>/data/` → `/factorio`
+Crit-Fumble hosts one container per member's server through its own (private) platform. Nothing in this
+repo depends on that: the container runs standalone with the `docker run` above, and the platform is one
+consumer of it, mounting a member's server data at `/factorio`.
 
 ## Build
 
